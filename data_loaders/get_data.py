@@ -76,9 +76,12 @@ def _load_pose_data(
             curr_pose[:, 3] = (curr_pose[:, 3] + np.pi) % (2 * np.pi)
 
         # load audio information
-        curr_audio, _ = torchaudio.load(
+        curr_audio, sr = torchaudio.load(
             curr_path_name.replace("_body_pose.npy", "_audio.wav")
         )
+        # print('curr_audio shape', curr_audio.shape)
+        # print('sample rate', sr)
+
         curr_audio = curr_audio.T
         if flip_person:
             prGreen("[get_data.py] flipping the dataset of left right person")

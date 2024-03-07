@@ -13,6 +13,7 @@ import torch.multiprocessing as mp
 
 from data_loaders.get_data import get_dataset_loader, load_local_data
 from torch.nn.parallel import DistributedDataParallel as DDP
+import torch.distributed as dist
 from torch.utils.tensorboard import SummaryWriter
 from train.train_platforms import ClearmlPlatform, NoPlatform, TensorboardPlatform
 from train.training_loop import TrainLoop
@@ -28,6 +29,12 @@ def main(rank: int, world_size: int):
     train_platform = train_platform_type(args.save_dir)
     train_platform.report_args(args, name="Args")
     setup_dist(args.device)
+
+    os.environ['MASTER_ADDR'] = '127.0.0.1'
+    os.environ['MASTER_PORT'] = '9000'
+
+    # Initialize the distributed environment
+    dist.init_process_group(backend='nccl', init_method='env://', world_size=world_size, rank=rank)
 
     if rank == 0:
         if args.save_dir is None:
@@ -58,7 +65,7 @@ def main(rank: int, world_size: int):
         model = DDP(
             model, device_ids=[rank], output_device=rank, find_unused_parameters=True
         )
-
+    print(type(model))
     params = (
         model.module.parameters_w_grad()
         if world_size > 1

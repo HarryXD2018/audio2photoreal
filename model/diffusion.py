@@ -7,6 +7,7 @@ LICENSE file in the root directory of this source tree.
 
 import json
 from typing import Callable, Optional
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -271,7 +272,7 @@ class FiLMTransformer(nn.Module):
         self.audio_model, self.audio_resampler = setup_lip_regressor()
 
     def setup_lip_models(self) -> None:
-        self.lip_model = Audio2LipRegressionTransformer()
+        self.lip_model = Audio2LipRegressionTransformer()            # default as False
         cp_path = "./assets/iter-0200000.pt"
         cp = torch.load(cp_path, map_location=torch.device(self.device))
         self.lip_model.load_state_dict(cp["model_state_dict"])
@@ -317,9 +318,14 @@ class FiLMTransformer(nn.Module):
                 reshaped_audio[:, i : i + 120, ...]
             )
         lip_cond = lip_cond.permute(0, 2, 3, 1).reshape((B, 338 * 3, -1))
+        
         lip_cond = torch.nn.functional.interpolate(
             lip_cond, size=cond_embed.shape[1], mode="nearest-exact"
         ).permute(0, 2, 1)
+        np.save('/home/chenhejia/code/audio2photoreal/lips_vertice.npy', lip_cond.detach().cpu().numpy())
+        np.save('/home/chenhejia/code/audio2photoreal/lips_audio.npy', audio.detach().cpu().numpy())
+
+        print(lip_cond.shape, audio.shape)
         cond_embed = torch.cat((cond_embed, lip_cond), dim=-1)
         return cond_embed
 

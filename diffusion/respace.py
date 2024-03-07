@@ -132,7 +132,8 @@ class _WrappedModel:
         self.model = model
         if hasattr(model, "step"):
             self.step = model.step
-        self.add_frame_cond = model.add_frame_cond
+        # self.add_frame_cond = model.add_frame_cond
+        self.add_frame_cond = False
         self.timestep_map = timestep_map
         self.rescale_timesteps = rescale_timesteps
         self.original_num_steps = original_num_steps
