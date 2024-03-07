@@ -53,6 +53,9 @@ def get_model_args(args, split_type):
     elif args.data_format == "pose":
         nfeat = 104
         lfeat = 256
+    elif args.data_format == "arkit":
+        nfeat = 51
+        lfeat = 256
 
     if not hasattr(args, "num_audio_layers"):
         args.num_audio_layers = 3  # backwards compat

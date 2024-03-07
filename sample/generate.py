@@ -11,7 +11,7 @@ from typing import Callable, Dict, Union
 
 import numpy as np
 import torch
-from data_loaders.get_data import get_dataset_loader, load_local_data
+from data_loaders.get_data import get_dataset_loader, load_local_data, get_dataset_loader_mead
 from diffusion.respace import SpacedDiffusion
 from model.cfg_sampler import ClassifierFreeSampleModel
 from model.diffusion import FiLMTransformer
@@ -86,7 +86,8 @@ def _run_single_diffusion(
     with torch.no_grad():
         sample = sample_fn(
             model,
-            (args.batch_size, model.nfeats, 1, args.curr_seq_length),
+            # (args.batch_size, model.nfeats, 1, args.curr_seq_length),
+            (args.batch_size, args.curr_seq_length, model.nfeats),
             clip_denoised=False,
             model_kwargs=model_kwargs,
             init_image=None,
@@ -95,15 +96,21 @@ def _run_single_diffusion(
             noise=None,
             const_noise=False,
         )
-    sample = inv_transform(sample.cpu().permute(0, 2, 3, 1), args.data_format).permute(
-        0, 3, 1, 2
-    )
-    curr_audio = inv_transform(model_kwargs["y"]["audio"].cpu().numpy(), "audio")
-    keyframes = inv_transform(model_kwargs["y"]["keyframes"], args.data_format)
-    gt_seq = inv_transform(gt.cpu().permute(0, 2, 3, 1), args.data_format).permute(
-        0, 3, 1, 2
-    )
-
+    sample = sample.cpu()
+    
+    # inv_transform(sample.cpu().permute(0, 2, 3, 1), args.data_format).permute(
+    #     0, 3, 1, 2
+    # )
+    # curr_audio = inv_transform(model_kwargs["y"]["audio"].cpu().numpy(), "audio")
+    curr_audio = model_kwargs["y"]["audio"].cpu().numpy()
+    
+    # keyframes = inv_transform(model_kwargs["y"]["keyframes"], args.data_format)
+    keyframes = None
+    gt_seq = gt.cpu()
+    # gt_seq = inv_transform(gt.cpu().permute(0, 2, 3, 1), args.data_format).permute(
+    #     0, 3, 1, 2
+    # )
+    print(sample.shape, gt_seq.shape)
     return sample, curr_audio, keyframes, gt_seq
 
 
@@ -137,18 +144,32 @@ def _generate_sequences(
         )
         all_motions.append(sample.cpu().numpy())
         all_audio.append(curr_audio)
-        all_keyframes.append(keyframes.cpu().numpy())
+        # all_keyframes.append(keyframes.cpu().numpy())
         all_gt.append(gt_seq.cpu().numpy())
-        all_lengths.append(model_kwargs["y"]["lengths"].cpu().numpy())
+        # all_lengths.append(model_kwargs["y"]["lengths"].cpu().numpy())
 
         print(f"created {len(all_motions) * args.batch_size} samples")
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    for idx, (motion, audio, gt) in enumerate(zip(all_motions, all_audio, all_gt)):
+        print(gt.shape)
+        T = gt.shape[1]
+        motion = motion[:, :T, :]
+        file_name = f'{idx//args.num_repetitions}_{idx%args.num_repetitions}'
+
+        np.save(os.path.join(args.output_dir, file_name+"_audio.npy"), audio)
+        np.save(os.path.join(args.output_dir, file_name+"_pred.npy"), motion)
+        np.save(os.path.join(args.output_dir, file_name+"_gt.npy"), gt)
+
+        
+
 
     return {
         "motions": np.concatenate(all_motions, axis=0),
         "audio": np.concatenate(all_audio, axis=0),
         "gt": np.concatenate(all_gt, axis=0),
-        "lengths": np.concatenate(all_lengths, axis=0),
-        "keyframes": np.concatenate(all_keyframes, axis=0),
+        # "lengths": np.concatenate(all_lengths, axis=0),
+        # "keyframes": np.concatenate(all_keyframes, axis=0),
     }
 
 
@@ -235,16 +256,20 @@ def _reset_sample_args(args) -> None:
 
 def _setup_dataset(args) -> DataLoader:
     data_root = args.data_root
-    data_dict = load_local_data(
-        data_root,
-        audio_per_frame=1600,
-        flip_person=args.flip_person,
-    )
-    test_data = get_dataset_loader(
+    # data_dict = load_local_data(
+    #     data_root,
+    #     audio_per_frame=1600,
+    #     flip_person=args.flip_person,
+    # )
+    # test_data = get_dataset_loader(
+    #     args=args,
+    #     data_dict=data_dict,
+    #     split="test",
+    #     chunk=True,
+    # )
+    test_data = get_dataset_loader_mead(
         args=args,
-        data_dict=data_dict,
-        split="test",
-        chunk=True,
+        split="test"
     )
     return test_data
 

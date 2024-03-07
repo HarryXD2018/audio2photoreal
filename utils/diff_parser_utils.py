@@ -1,3 +1,4 @@
+
 """
 Copyright (c) Meta Platforms, Inc. and affiliates.
 All rights reserved.
@@ -140,7 +141,7 @@ def add_model_options(parser):
     group.add_argument(
         "--data_format",
         type=str,
-        choices=["pose", "face"],
+        choices=["pose", "face", "arkit"],
         default="pose",
         help="whether or not to use vae for diffusion process",
     )
@@ -154,7 +155,7 @@ def add_data_options(parser):
     group.add_argument(
         "--dataset",
         default="social",
-        choices=["social"],
+        choices=["social", "mead"],
         type=str,
         help="Dataset name (choose from list).",
     )
@@ -284,6 +285,8 @@ def add_generate_options(parser):
 
 def get_cond_mode(args):
     if args.dataset == "social":
+        cond_mode = "audio"
+    elif args.datase == "mead":
         cond_mode = "audio"
     return cond_mode
 

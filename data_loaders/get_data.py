@@ -12,8 +12,8 @@ from typing import Dict, List
 import numpy as np
 import torch
 import torchaudio
-from data_loaders.data import Social
-from data_loaders.tensors import social_collate
+from data_loaders.data import Social, MEADDataset
+from data_loaders.tensors import social_collate, mead_collate
 from torch.utils.data import DataLoader
 from utils.misc import prGreen
 
@@ -39,6 +39,31 @@ def get_dataset_loader(
         num_workers=8,
         drop_last=True,
         collate_fn=social_collate,
+        pin_memory=True,
+    )
+    return loader
+
+def get_dataset_loader_mead(
+    args,
+    # data_dict: Dict[str, np.ndarray],
+    split: str = "train",
+    chunk: bool = False,
+    add_padding: bool = True,
+) -> DataLoader:
+    dataset = MEADDataset(
+        args=args,
+        # data_dict=data_dict,
+        split=split,
+        # chunk=chunk,
+        # add_padding=add_padding,
+    )
+    loader = DataLoader(
+        dataset,
+        batch_size=args.batch_size,
+        shuffle=not split == "test",
+        num_workers=8,
+        drop_last=True,
+        collate_fn=mead_collate,
         pin_memory=True,
     )
     return loader
@@ -127,3 +152,6 @@ def load_local_data(
         audio_per_frame,
         flip_person=flip_person,
     )
+
+
+

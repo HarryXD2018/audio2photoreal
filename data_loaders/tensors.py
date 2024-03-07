@@ -84,3 +84,33 @@ def social_collate(batch):
         for b in batch
     ]
     return collate_v2(adapted_batch)
+
+
+def mead_collate(batch):
+    return PadSequence()(batch)
+
+class PadSequence:
+    def __init__(self):
+        self.need_pad = ['audio', 'motion', 'missing', 'clip_seq']
+
+    def __call__(self, batch):
+        results = {}
+        for key in batch[0].keys():
+            if key in self.need_pad:
+                results[key] = torch.nn.utils.rnn.pad_sequence([x[key] for x in batch], batch_first=True)
+            else:
+                results[key] = torch.stack([x[key] for x in batch])
+        cond = {
+            'y': {
+                k: results[k] for k in results.keys() if k != 'motion' 
+            }
+        }
+        maskbatchTensor = (
+            lengths_to_mask(results['m_length'], results['motion'].shape[-1])
+            .unsqueeze(1)
+            .unsqueeze(1)
+        )  # unqueeze for broadcasting
+        
+        cond['y']['mask'] = maskbatchTensor
+        motion = results['motion']
+        return motion, cond

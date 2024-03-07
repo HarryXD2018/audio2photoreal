@@ -169,6 +169,24 @@ class FiLMTransformer(nn.Module):
                     )
                 )
             self.cond_encoder.apply(init_weight)
+        elif self.data_format == "arkit":
+            self.use_cm = False
+            cond_feature_dim = 1024 + 1014      # audio + lips
+            self.setup_lip_models()
+            self.cond_encoder = nn.Sequential()
+            for _ in range(2):
+                self.cond_encoder.append(
+                    TransformerEncoderLayerRotary(
+                        d_model=latent_dim,
+                        nhead=num_heads,
+                        dim_feedforward=ff_size,
+                        dropout=dropout,
+                        activation=activation,
+                        batch_first=True,
+                        rotary=self.rotary,
+                    )
+                )
+            self.cond_encoder.apply(init_weight)
 
         self.cond_projection = nn.Linear(cond_feature_dim, latent_dim)
         self.non_attn_cond_projection = nn.Sequential(
@@ -193,8 +211,10 @@ class FiLMTransformer(nn.Module):
                     use_cm=self.use_cm,
                 )
             )
+
         self.seqTransDecoder = DecoderLayerStack(decoderstack)
         self.seqTransDecoder.apply(init_weight)
+        
         self.final_layer = nn.Linear(latent_dim, self.nfeats)
         self.final_layer.apply(init_weight)
 
@@ -283,17 +303,19 @@ class FiLMTransformer(nn.Module):
         return [p for p in self.parameters() if p.requires_grad]
 
     def encode_audio(self, raw_audio: torch.Tensor) -> torch.Tensor:
+        #TODO: two channel to only speaker channel
         device = next(self.parameters()).device
-        a0 = self.audio_resampler(raw_audio[:, :, 0].to(device))
-        a1 = self.audio_resampler(raw_audio[:, :, 1].to(device))
+        a0 = self.audio_resampler(raw_audio.to(device))
+        # a1 = self.audio_resampler(raw_audio[:, :, 1].to(device))
         with torch.no_grad():
             z0 = self.audio_model.feature_extractor(a0)
-            z1 = self.audio_model.feature_extractor(a1)
-            emb = torch.cat((z0, z1), axis=1).permute(0, 2, 1)
+            # z1 = self.audio_model.feature_extractor(a1)
+            emb = torch.cat((z0, z0), axis=1).permute(0, 2, 1)
         return emb
 
     def encode_lip(self, audio: torch.Tensor, cond_embed: torch.Tensor) -> torch.Tensor:
-        reshaped_audio = audio.reshape((audio.shape[0], -1, 1600, 2))[..., 0]
+        # print('cond embed shape', cond_embed.shape)
+        reshaped_audio = audio.reshape((audio.shape[0], -1, 1600))
         # processes 4 seconds at a time
         B, T, _ = reshaped_audio.shape
         lip_cond = torch.zeros(
@@ -306,10 +328,19 @@ class FiLMTransformer(nn.Module):
                 reshaped_audio[:, i : i + 120, ...]
             )
         lip_cond = lip_cond.permute(0, 2, 3, 1).reshape((B, 338 * 3, -1))
+
+        #TODO: interpolate to 25 fps
         lip_cond = torch.nn.functional.interpolate(
             lip_cond, size=cond_embed.shape[1], mode="nearest-exact"
         ).permute(0, 2, 1)
+
+        # print('lip_cond shape', lip_cond.shape)
         cond_embed = torch.cat((cond_embed, lip_cond), dim=-1)
+
+        cond_embed = torch.nn.functional.interpolate(
+            cond_embed.permute(0, 2, 1), size=int(cond_embed.shape[1] / 3 * 2.5), mode="nearest-exact"
+        ).permute(0, 2, 1)
+
         return cond_embed
 
     def encode_keyframes(
@@ -355,6 +386,9 @@ class FiLMTransformer(nn.Module):
             cond_embed = y["audio"]
             cond_embed = self.encode_audio(cond_embed)
             if self.data_format == "face":
+                cond_embed = self.encode_lip(y["audio"], cond_embed)
+                pose_tokens = None
+            elif self.data_format == 'arkit':
                 cond_embed = self.encode_lip(y["audio"], cond_embed)
                 pose_tokens = None
             if self.data_format == "pose":

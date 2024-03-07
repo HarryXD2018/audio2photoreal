@@ -310,7 +310,7 @@ class GaussianDiffusion:
             return x
 
         pred_xstart = process_xstart(model_output)
-        pred_xstart = pred_xstart.permute(0, 2, 1).unsqueeze(2)
+        # pred_xstart = pred_xstart.permute(0, 2, 1).unsqueeze(2)
         model_mean, _, _ = self.q_posterior_mean_variance(
             x_start=pred_xstart, x_t=x, t=t
         )
@@ -1226,12 +1226,21 @@ class GaussianDiffusion:
             ModelMeanType.EPSILON: noise,
         }[self.model_mean_type]
 
+        
+        assert model_output.shape == target.shape == x_start.shape, f'get {model_output.shape} and {target.shape} and {x_start.shape}'
         model_output = model_output.permute(0, 2, 1).unsqueeze(2)
-        assert model_output.shape == target.shape == x_start.shape
-
+        
         missing_mask = model_kwargs["y"]["missing"][..., 0]
+
+        # print(
+        #     'model_output shape', model_output.shape, 
+        #     'missing mask', missing_mask.shape, 
+        #     'mask', mask.shape)
         missing_mask = missing_mask.unsqueeze(1).unsqueeze(1)
-        missing_mask = mask * missing_mask
+        missing_mask = mask.permute(0, 3, 1, 2) * missing_mask
+
+        target = target.unsqueeze(2).permute(0, 3, 2, 1)        # B, 51, 1, T
+        assert model_output.shape == target.shape == missing_mask.shape, f'get {model_output.shape} and {target.shape} and {missing_mask.shape}'
         terms["rot_mse"] = self.masked_l2(target, model_output, missing_mask)
         if self.lambda_vel > 0.0:
             target_vel = target[..., 1:] - target[..., :-1]
@@ -1243,6 +1252,8 @@ class GaussianDiffusion:
             )
 
         terms["loss"] = terms["rot_mse"] + (self.lambda_vel * terms.get("vel_mse", 0.0))
+
+        # print('x_start', x_start.shape, 'x_t', x_t.shape)
 
         with torch.no_grad():
             terms["vb"] = self._vb_terms_bpd(
